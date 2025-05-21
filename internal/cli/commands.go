@@ -3,15 +3,16 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/stub" // TODO remove again
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/weisscorp/migrate"
+	_ "github.com/weisscorp/migrate/database/stub" // TODO remove again
+	_ "github.com/weisscorp/migrate/source/file"
 )
 
 var (

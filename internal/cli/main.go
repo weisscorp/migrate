@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database"
-	"github.com/golang-migrate/migrate/v4/source"
+	"github.com/weisscorp/migrate"
+	"github.com/weisscorp/migrate/database"
+	"github.com/weisscorp/migrate/source"
 )
 
 const (
@@ -48,7 +48,7 @@ func newFlagSetWithHelp(name string) (*flag.FlagSet, *bool) {
 }
 
 // set main log
-var log = &Log{}
+var cliLog = &Log{}
 
 func printUsageAndExit() {
 	flag.Usage()
@@ -100,7 +100,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 	flag.Parse()
 
 	// initialize logger
-	log.verbose = *verbosePtr
+	cliLog.verbose = *verbosePtr
 
 	// show cli version
 	if *versionPtr {
@@ -126,12 +126,12 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 	defer func() {
 		if migraterErr == nil {
 			if _, err := migrater.Close(); err != nil {
-				log.Println(err)
+				cliLog.Println(err)
 			}
 		}
 	}()
 	if migraterErr == nil {
-		migrater.Log = log
+		migrater.Log = cliLog
 		migrater.PrefetchMigrations = *prefetchPtr
 		migrater.LockTimeout = time.Duration(int64(*lockTimeoutPtr)) * time.Second
 
@@ -140,7 +140,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		signal.Notify(signals, syscall.SIGINT)
 		go func() {
 			for range signals {
-				log.Println("Stopping after this running migration ...")
+				cliLog.Println("Stopping after this running migration ...")
 				migrater.GracefulStop <- true
 				return
 			}
@@ -169,27 +169,27 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		createFlagSet.IntVar(&seqDigits, "digits", seqDigits, "The number of digits to use in sequences (default: 6)")
 
 		if err := createFlagSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*help, createUsage, createFlagSet)
 
 		if createFlagSet.NArg() == 0 {
-			log.fatal("error: please specify name")
+			cliLog.fatal("error: please specify name")
 		}
 		name := createFlagSet.Arg(0)
 
 		if *extPtr == "" {
-			log.fatal("error: -ext flag must be specified")
+			cliLog.fatal("error: -ext flag must be specified")
 		}
 
 		timezone, err := time.LoadLocation(*timezoneName)
 		if err != nil {
-			log.fatal(err)
+			cliLog.fatal(err)
 		}
 
 		if err := createCmd(*dirPtr, startTime.In(timezone), *formatPtr, name, *extPtr, seq, seqDigits, true); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 	case "goto":
@@ -197,60 +197,60 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		gotoSet, helpPtr := newFlagSetWithHelp("goto")
 
 		if err := gotoSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*helpPtr, gotoUsage, gotoSet)
 
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		if gotoSet.NArg() == 0 {
-			log.fatal("error: please specify version argument V")
+			cliLog.fatal("error: please specify version argument V")
 		}
 
 		v, err := strconv.ParseUint(gotoSet.Arg(0), 10, 64)
 		if err != nil {
-			log.fatal("error: can't read version argument V")
+			cliLog.fatal("error: can't read version argument V")
 		}
 
 		if err := gotoCmd(migrater, uint(v)); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
-		if log.verbose {
-			log.Println("Finished after", time.Since(startTime))
+		if cliLog.verbose {
+			cliLog.Println("Finished after", time.Since(startTime))
 		}
 
 	case "up":
 		upSet, helpPtr := newFlagSetWithHelp("up")
 
 		if err := upSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*helpPtr, upUsage, upSet)
 
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		limit := -1
 		if upSet.NArg() > 0 {
 			n, err := strconv.ParseUint(upSet.Arg(0), 10, 64)
 			if err != nil {
-				log.fatal("error: can't read limit argument N")
+				cliLog.fatal("error: can't read limit argument N")
 			}
 			limit = int(n)
 		}
 
 		if err := upCmd(migrater, limit); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
-		if log.verbose {
-			log.Println("Finished after", time.Since(startTime))
+		if cliLog.verbose {
+			cliLog.Println("Finished after", time.Since(startTime))
 		}
 
 	case "down":
@@ -258,39 +258,39 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		applyAll := downFlagSet.Bool("all", false, "Apply all down migrations")
 
 		if err := downFlagSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*helpPtr, downUsage, downFlagSet)
 
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		downArgs := downFlagSet.Args()
 		num, needsConfirm, err := numDownMigrationsFromArgs(*applyAll, downArgs)
 		if err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 		if needsConfirm {
-			log.Println("Are you sure you want to apply all down migrations? [y/N]")
+			cliLog.Println("Are you sure you want to apply all down migrations? [y/N]")
 			var response string
 			_, _ = fmt.Scanln(&response)
 			response = strings.ToLower(strings.TrimSpace(response))
 
 			if response == "y" {
-				log.Println("Applying all down migrations")
+				cliLog.Println("Applying all down migrations")
 			} else {
-				log.fatal("Not applying all down migrations")
+				cliLog.fatal("Not applying all down migrations")
 			}
 		}
 
 		if err := downCmd(migrater, num); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
-		if log.verbose {
-			log.Println("Finished after", time.Since(startTime))
+		if cliLog.verbose {
+			cliLog.Println("Finished after", time.Since(startTime))
 		}
 
 	case "drop":
@@ -298,77 +298,77 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		forceDrop := dropFlagSet.Bool("f", false, "Force the drop command by bypassing the confirmation prompt")
 
 		if err := dropFlagSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*help, dropUsage, dropFlagSet)
 
 		if !*forceDrop {
-			log.Println("Are you sure you want to drop the entire database schema? [y/N]")
+			cliLog.Println("Are you sure you want to drop the entire database schema? [y/N]")
 			var response string
 			_, _ = fmt.Scanln(&response)
 			response = strings.ToLower(strings.TrimSpace(response))
 
 			if response == "y" {
-				log.Println("Dropping the entire database schema")
+				cliLog.Println("Dropping the entire database schema")
 			} else {
-				log.fatal("Aborted dropping the entire database schema")
+				cliLog.fatal("Aborted dropping the entire database schema")
 			}
 		}
 
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		if err := dropCmd(migrater); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
-		if log.verbose {
-			log.Println("Finished after", time.Since(startTime))
+		if cliLog.verbose {
+			cliLog.Println("Finished after", time.Since(startTime))
 		}
 
 	case "force":
 		forceSet, helpPtr := newFlagSetWithHelp("force")
 
 		if err := forceSet.Parse(args); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 		handleSubCmdHelp(*helpPtr, forceUsage, forceSet)
 
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		if forceSet.NArg() == 0 {
-			log.fatal("error: please specify version argument V")
+			cliLog.fatal("error: please specify version argument V")
 		}
 
 		v, err := strconv.ParseInt(forceSet.Arg(0), 10, 64)
 		if err != nil {
-			log.fatal("error: can't read version argument V")
+			cliLog.fatal("error: can't read version argument V")
 		}
 
 		if v < -1 {
-			log.fatal("error: argument V must be >= -1")
+			cliLog.fatal("error: argument V must be >= -1")
 		}
 
 		if err := forceCmd(migrater, int(v)); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
-		if log.verbose {
-			log.Println("Finished after", time.Since(startTime))
+		if cliLog.verbose {
+			cliLog.Println("Finished after", time.Since(startTime))
 		}
 
 	case "version":
 		if migraterErr != nil {
-			log.fatalErr(migraterErr)
+			cliLog.fatalErr(migraterErr)
 		}
 
 		if err := versionCmd(migrater); err != nil {
-			log.fatalErr(err)
+			cliLog.fatalErr(err)
 		}
 
 	default:

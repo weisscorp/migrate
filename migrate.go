@@ -7,15 +7,16 @@ package migrate
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/golang-migrate/migrate/v4/database"
-	iurl "github.com/golang-migrate/migrate/v4/internal/url"
-	"github.com/golang-migrate/migrate/v4/source"
+	"github.com/weisscorp/migrate/database"
+	iurl "github.com/weisscorp/migrate/internal/url"
+	"github.com/weisscorp/migrate/source"
 )
 
 // DefaultPrefetchMigrations sets the number of migrations to pre-read
@@ -82,6 +83,23 @@ type Migrate struct {
 	LockTimeout time.Duration
 }
 
+// RedactPasswordFromURL removes the password from a URL string for safe logging.
+func RedactPasswordFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL // Return original if parsing fails
+	}
+
+	if u.User != nil {
+		_, passwordSet := u.User.Password()
+		if passwordSet {
+			u.User = url.User(u.User.Username() + ":****")
+		}
+	}
+
+	return u.String()
+}
+
 // New returns a new Migrate instance from a source URL and a database URL.
 // The URL scheme is defined by each driver.
 func New(sourceURL, databaseURL string) (*Migrate, error) {
@@ -101,13 +119,13 @@ func New(sourceURL, databaseURL string) (*Migrate, error) {
 
 	sourceDrv, err := source.Open(sourceURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open source, %q: %w", sourceURL, err)
+		return nil, fmt.Errorf("failed to open source, %s: %w", RedactPasswordFromURL(sourceURL), err)
 	}
 	m.sourceDrv = sourceDrv
 
 	databaseDrv, err := database.Open(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database, %q: %w", databaseURL, err)
+		return nil, fmt.Errorf("failed to open database, %s: %w", RedactPasswordFromURL(databaseURL), err)
 	}
 	m.databaseDrv = databaseDrv
 
@@ -131,7 +149,7 @@ func NewWithDatabaseInstance(sourceURL string, databaseName string, databaseInst
 
 	sourceDrv, err := source.Open(sourceURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open source, %q: %w", sourceURL, err)
+		return nil, fmt.Errorf("failed to open source, %s: %w", RedactPasswordFromURL(sourceURL), err)
 	}
 	m.sourceDrv = sourceDrv
 
@@ -157,7 +175,7 @@ func NewWithSourceInstance(sourceName string, sourceInstance source.Driver, data
 
 	databaseDrv, err := database.Open(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database, %q: %w", databaseURL, err)
+		return nil, fmt.Errorf("failed to open database, %s: %w", RedactPasswordFromURL(databaseURL), err)
 	}
 	m.databaseDrv = databaseDrv
 
